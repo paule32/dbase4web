@@ -31,13 +31,12 @@
 # include <cstdint>
 # include <string>
 # include <fstream>          // file input/output
-# include <sstream>
-# include <vector>
-# include <exception>
+# include <sstream>          // for code-holder
+# include <vector>           // app parameter's
+# include <map>              // new-object parameters's
+# include <exception>        // for exception handĺer's
 # include <cctype>
 using namespace std;
-
-# include "dbase_macros.hh"     // placeholders macros
 
 #ifdef DEBUG
 bool dBaseDebugFlag = true;     // enabled  debug?
@@ -68,6 +67,10 @@ std::string str_token;      // current parsed token
 std::vector<std::string> str_pvec(255);  // parameter vector (items)
 std::vector<std::string>::const_iterator pvec_i;
 
+std::string st1_token;                // first  token string
+std::string st2_token;                // second token string
+
+const int MAX_OBJECTS   = 2048;       // max objects in class
 const int MAX_TOKEN_LEN = 255;        // maximum ident-token length
 const int RULE_END      = 10000;      // max rules
 
@@ -219,15 +222,22 @@ static class dBaseDebug dbDebug;
 
 // visitor pattern ------------------------------------
 //
-class dBaseAppClassCommand;         // program (name) class
-class dBaseAppClassCTORCommand;     // constructor
-class dBaseAppClassCTOREnd;         // end code for constructor
-class dBaseAppClassDTORCommand;     // de-structor
-class dBaseAppClassNewObject;       // this.f = new Object
+class dBaseAppClassCommand;             // program (name) class
+class dBaseAppClassCTORStart;           // head/start constructor
+class dBaseAppClassCTORCommand;         // constructor
+class dBaseAppClassCTOREnd;             // end code for constructor
+class dBaseAppClassDTORCommand;         // de-structor command
+class dBaseAppClassDTOREnd;             // end mark
+
+class dBaseAppClassNewObject;           // this.f = new Object
+class dBaseAppClassNewObjectParameter;  // object parameter
 
 class dBaseCodeClassCommand;        // application code
-class dBaseCodeClassCTORCommand;    // constructor
+class dBaseCodeClassCTORStart;      // constructor
+class dBaseCodeClassCTORCommand;    // body
+class dBaseCodeClassCTOREnd;        // end-mark
 class dBaseCodeClassDTORCommand;    // de-structor
+class dBaseCodeClassDTOREnd;        // end-mark for de-structor
 
 class dBaseAppClassHeader;      // file class header
 class dBaseAppClassFooter;      // file class footer
@@ -236,14 +246,22 @@ class dBaseAppParameter;        // parameter bmodal, ...
 
 template <
     typename Ta,            // dBaseAppClassCommand
-    typename Tb = void,     // dBaseAppClassCTORCommand
-    typename Tc = void,     // dBaseAppClassCTOREnd
-    typename Td = void,     // dBaseAppClassDTORCommand
-    typename Te = void,     // dBaseAppClassNewObject
+    typename Tb = void,     // dBaseAppClassCTORStart
+    typename Tc = void,     // dBaseAppClassCTORCommand
+    typename Td = void,     // dBaseAppClassCTOREnd
+    typename Te = void,     // dBaseAppClassDTORCommand
+    typename Tf = void,     // dBaseAppClassDTOREnd
+    //
+    typename Tg = void,     // dBaseAppClassNewObject
+    typename Th = void,     // dBaseAppClassNewObjectParameter
+
     // -------------------- //
     typename TA = void,     // dBaseCodeClassCommand
-    typename TB = void,     // dBaseCodeClassCTORCommand
-    typename TC = void,     // dBaseCodeClassDTORCommand
+    typename TB = void,     // dBaseCodeClassCTORStart
+    typename TC = void,     // dBaseCodeClassCTORCommand
+    typename TD = void,     // dBaseCodeClassCTOREnd
+    typename TE = void,     // dBaseCodeClassDTORCommand
+    typename TF = void,     // dBaseCodeClassDTOREnd
 
     typename T0 = void,     // dBaseAppClassHeader
     typename T1 = void,     // dBaseAppClassFooter
@@ -257,10 +275,17 @@ public:
     virtual void accept(Tc&) = 0;
     virtual void accept(Td&) = 0;
     virtual void accept(Te&) = 0;
+    virtual void accept(Tf&) = 0;
+    //
+    virtual void accept(Tg&) = 0;
+    virtual void accept(Th&) = 0;
     //
     virtual void accept(TA&) = 0;
     virtual void accept(TB&) = 0;
     virtual void accept(TC&) = 0;
+    virtual void accept(TD&) = 0;
+    virtual void accept(TE&) = 0;
+    virtual void accept(TF&) = 0;
     //
     virtual void accept(T0&) = 0;
     virtual void accept(T1&) = 0;
@@ -276,8 +301,10 @@ public:
 // -----------------------------------------------------------
 template <
     typename Ta       , typename Tb = void, typename Tc = void,
-    typename Td = void, typename Te,
+    typename Td = void, typename Te = void, typename Tf = void,
+    typename Tg = void, typename Th = void,
     typename TA = void, typename TB = void, typename TC = void,
+    typename TD = void, typename TE = void, typename TF = void,
     typename T0 = void, typename T1 = void,
     typename TP = void>
 class dBaseVisitor
@@ -288,10 +315,17 @@ public:
     virtual void visit(Tc&) = 0;
     virtual void visit(Td&) = 0;
     virtual void visit(Te&) = 0;
+    virtual void visit(Tf&) = 0;
+    //
+    virtual void visit(Tg&) = 0;
+    virtual void visit(Th&) = 0;
     //
     virtual void visit(TA&) = 0;
     virtual void visit(TB&) = 0;
     virtual void visit(TC&) = 0;
+    virtual void visit(TD&) = 0;
+    virtual void visit(TE&) = 0;
+    virtual void visit(TF&) = 0;
     //
     virtual void visit(T0&) = 0;
     virtual void visit(T1&) = 0;
@@ -308,14 +342,21 @@ public:
 
 class dBaseCommandVisitor : public dBaseVisitor<
 class dBaseAppClassCommand,
+class dBaseAppClassCTORStart,
 class dBaseAppClassCTORCommand,
 class dBaseAppClassCTOREnd,
 class dBaseAppClassDTORCommand,
-class dBaseAppClassNewObject
+class dBaseAppClassDTOREnd,
+//
+class dBaseAppClassNewObject,
+class dBaseAppClassNewObjectParameter,
 // -------------------------------------
 class dBaseCodeClassCommand,
+class dBaseCodeClassCTORStart,
 class dBaseCodeClassCTORCommand,
+class dBaseCodeClassCTOREnd,
 class dBaseCodeClassDTORCommand,
+class dBaseCodeClassDTOREnd,
 // -------------------------------------
 class dBaseAppClassHeader,
 class dBaseAppClassFooter,
@@ -326,8 +367,19 @@ class dBaseAppObject {
 public:
     std::stringstream js_code_str;      // javascript code string stream
     std::vector<std::string> parameters;
-    std::map<std::string, std::vector<std::string>> object_parameter;
+    std::vector<dBaseAppClassNewObject*> objects;
 };
+
+// ---------------------
+// forward declares ...
+// ---------------------
+dBaseAppParameter               *  app_parameter        = nullptr;
+dBaseAppClassHeader             *  app_header           = nullptr;
+dBaseAppClassCTORCommand        *  app_ctor             = nullptr;
+dBaseAppClassNewObject          *  app_objects[2048];
+dBaseAppClassFooter             *  app_footer           = nullptr;
+
+int dBaseAppClassNewObjectIndex = 0;
 
 class  dBaseAST: public dBaseVisitable<dBaseCommandVisitor> { };
 class  dBaseAppClassCommand:
@@ -341,33 +393,142 @@ public:
 };
 
 // ---------------------------------------
+// parameter class for new object's ...
+// ---------------------------------------
+class dBaseAppClassNewObjectParameter:
+public dBaseAppObject,
+public dBaseAST {
+public:
+    explicit dBaseAppClassNewObjectParameter() {
+    }
+    explicit dBaseAppClassNewObjectParameter(std::string pname)
+    {
+        bool found = false;
+        for (auto item: parameter) {
+            if (item == pname) {
+                found = true;
+                break;
+            }
+        }
+        if (!found)
+        parameter.push_back(pname);
+    }
+
+    void setParameter(std::string pname) { parameter.push_back(pname); }
+
+    void accept(dBaseCommandVisitor& visitor) {
+        visitor.visit(*this);
+    }
+
+    std::vector<std::string> parameter;
+};
+
+// ---------------------------------------
 // code for creation of an new object ...
 // ---------------------------------------
 class dBaseAppClassNewObject:
 public dBaseAppObject,
 public dBaseAST {
 public:
-    explicit dBaseAppClassNewObject() { }
-    explicit dBaseAppClassNewObject(std::string oname) {
+    explicit dBaseAppClassNewObject() {
+        m_parameter = new dBaseAppClassNewObjectParameter;
+        object_name.clear();
+        object_var .clear();
+    }
+    explicit dBaseAppClassNewObject(std::string vname, std::string name) {
+        m_parameter = new dBaseAppClassNewObjectParameter;
+        object_name = name;
+        object_var  = vname;
+    }
+    explicit dBaseAppClassNewObject(std::string vname, std::string name,
+             dBaseAppClassNewObjectParameter  & pvec) {
+        m_parameter = &pvec;
+        object_name = name;
+        object_var  = vname;
+    }
+    explicit dBaseAppClassNewObject(std::string vname, std::string name,
+             dBaseAppClassNewObjectParameter  * pvec) {
+        m_parameter = pvec;
+        object_name = name;
+        object_var  = vname;
+    }
+
+    void setParameter(std::string p) {
+        m_parameter->parameter.push_back(p);
+    }
+    void setObjectName(std::string n) { object_name = n; }
+    void setObjectVar (std::string n) { object_var  = n; }
+
+    void accept(dBaseCommandVisitor& visitor) {
+        int i = 0;
+        int j = 0;
+        int k = 0;
+
+        std::string tab(ident_pos, ' ');
+
         bool found = false;
-        for (auto item: object_parameter) {
-            if (item[oname] != nullptr) {
+        for (k = 0; k < 20; ++k) {
+            if (app_objects[k] != nullptr) {
                 found = true;
                 break;
             }
         }
-        if (!found) {
-            std::cout << "falsch" << std::endl;
-            std::vector<std::string> null_vec;
-            null_vec.push_back(std::string("@null"));
+//            if (app_objects[k]->parameter->parameter.size())
+        if (found) {
+if (m_parameter == nullptr);
+m_parameter = new dBaseAppClassNewObjectParameter;
 
-            object_parameter[oname] = null_vec;
+std::cout << "found" << std::endl;
+if (m_parameter != nullptr)
+std::cout << "p ok\n";
+std::string ff1,ff2;
+ff1.clear();ff2.clear();
+std::cout << "set1 ok\n";
+ff1.append("FF1");
+ff2.append("FF2");
+std::cout << "set2 ok\n";
+m_parameter->setParameter(ff1);std::cout << "set3 ok\n";
+m_parameter->setParameter(ff2);std::cout << "set4 ok\n";
+std::cout << "set5 ok\n";
+if (m_parameter->parameter.empty())
+std::cout << "is empty()\n"; else
+std::cout << "is filled\n";
+
+
+
+//std::cout << "new: " << m_parameter->parameter[0].size() << std::endl;
+
+//                for (auto item: app_objects[k]->parameter->parameter) {
+//                    js_code_str << item;
+//                    if (++i <   parameter->parameter.size())
+//                    js_code_str  << ", ";
+//            }   }   js_code_str  << ");";
+
         }
-    }
-    explicit dBaseAppClassNewObject(std::string oname,
-             dBaseAppClassNewObjectParameter  & pvec) {
+        //
+        visitor.visit(*this);
     }
 
+    dBaseAppClassNewObjectParameter * m_parameter = nullptr;
+    std::string object_name;
+    std::string object_var;
+};
+
+class  dBaseAppClassCTORStart:
+public dBaseAppObject,
+public dBaseAST
+{
+public:
+    void accept(dBaseCommandVisitor& visitor) {
+        visitor.visit(*this);
+    }
+};
+
+class  dBaseAppClassDTOREnd:
+public dBaseAppObject,
+public dBaseAST
+{
+public:
     void accept(dBaseCommandVisitor& visitor) {
         visitor.visit(*this);
     }
@@ -378,10 +539,14 @@ public dBaseAppObject,
 public dBaseAST {
 public:
     void accept(dBaseCommandVisitor& visitor) {
-        ident_pos -= 4;
+        if ((ident_pos -= 4) < 3)
+        ident_pos = 4;
         std::string tab(ident_pos, ' ');
         js_code_str <<   tab
-        << "}" << std::endl;
+        << "}";
+        if ((ident_pos -= 4) < 3)
+        ident_pos = 4;
+        //
         visitor.visit(*this);
     }
 };
@@ -393,8 +558,11 @@ class dBaseAppParameter:
 public dBaseAppObject,
 public dBaseAST {
 public:
-    explicit dBaseAppParameter() { }
+    explicit dBaseAppParameter() {
+        parameters.clear();
+    }
     explicit dBaseAppParameter(std::string pname) {
+        parameters.clear();
         parameters.push_back(pname);
     }
     void setParameter(std::string & pname) { parameters.push_back( pname); }
@@ -431,6 +599,7 @@ public dBaseAppObject,
 public dBaseAST {
 public:
     void accept(dBaseCommandVisitor& visitor) {
+std::cout << "class\n";
         js_code_str << "}"
         << std::endl
         << "_test = new __test();"
@@ -446,7 +615,8 @@ class dBaseAppClassCTORCommand:
 public dBaseAppObject,
 public dBaseAST
 {
-    dBaseAppClassCTORCommand *ctor_parent;
+    dBaseAppClassCTORCommand *ctor_parent     = nullptr;
+    dBaseAppParameter        *app_parameters  = nullptr;
 public:
     explicit dBaseAppClassCTORCommand(
              dBaseAppClassCTORCommand* parent = nullptr) {
@@ -456,12 +626,15 @@ public:
              dBaseAppParameter*  pvec) {
         parameters = pvec->parameters;
     } 
-    ~dBaseAppClassCTORCommand() {
-        delete(ctor_parent);
-    }
 
     dBaseAppClassCTORCommand & operator *() {
         return *ctor_parent;
+    }
+
+    void setParameter(dBaseAppParameter & pvec) {
+        parameters.clear();
+        for (auto item: pvec.parameters)
+        app_parameter->parameters.push_back(item);
     }
 
     void accept(dBaseCommandVisitor& visitor) {
@@ -469,20 +642,20 @@ public:
         ident_pos += 4;
         std::string str1(ident_pos, ' ');
         js_code_str << str1 << "constructor(";
+std::cout << "class22\n";
 
-        for (auto item: parameters) {
+        for (auto item: app_parameter->parameters) {
             js_code_str  << item;
-            if (++i < parameters.size())
+            if (++i < app_parameter->parameters.size())
             js_code_str  << ", ";
         }   js_code_str  << ") {" << std::endl;
 
         ident_pos += 4;
-        for (auto item: parameters) {
+        for (auto item: app_parameter->parameters) {
             std::string tab(ident_pos, ' ');
-            js_code_str << tab << "this."
+            js_code_str << tab  << "this."
             << item     << " = "
-            << item     << ";"
-            << std::endl;
+            << item     << ";"  << std::endl;
         }
 
         visitor.visit(*this);
@@ -494,9 +667,11 @@ public dBaseAST
 {
 public:
     void accept(dBaseCommandVisitor& visitor) {
+#if 0
         ident_pos += 4;
         std::string str(ident_pos, ' ');
         js_code_str << str << "}" << std::endl;
+#endif
         //
         visitor.visit(*this);
     }
@@ -517,18 +692,80 @@ public dBaseAST
 {
 public:
     void accept(dBaseCommandVisitor& visitor) {
-        ident_pos += 4;
-        js_code_str << "class Form1 {" << std::endl;
         visitor.visit(*this);
     }
 };
+class dBaseCodeClassCTORStart:
+public dBaseAppObject,
+public dBaseAST
+{
+public:
+    explicit dBaseCodeClassCTORStart() { }
+    explicit dBaseCodeClassCTORStart(dBaseAppClassNewObject & obj) {
+        objects.push_back(&obj);
+    }
+    explicit dBaseCodeClassCTORStart(dBaseAppClassNewObject * obj) {
+        objects.push_back(obj);
+    }
+
+    void accept(dBaseCommandVisitor& visitor) {
+        std::string tab(ident_pos, ' ');
+        int len = 0;
+std::cout << "class\n";
+
+        for (auto item: objects) {
+            js_code_str << tab
+            << "class " << item->object_name
+            << " {"     << std::endl <<  tab << tab
+            << "constructor(";
+
+            len = item->m_parameter->parameter.size();
+            for (int i = 0; i < len; ++i) {
+                js_code_str << item->m_parameter->parameter[i];
+                if (i+1 < len)
+                js_code_str << ", ";
+            }   js_code_str << ") {" << std::endl;
+
+            for (int i = 0; i < len; ++i) {
+                js_code_str << tab << tab << tab
+                << "this."  << item->m_parameter->parameter[i]
+                << " = "    << item->m_parameter->parameter[i]
+                << ";"
+                << std::endl;
+            }
+        }
+        //
+        visitor.visit(*this);
+    }
+};
+class dBaseCodeClassCTOREnd:
+public dBaseAppObject,
+public dBaseAST
+{
+public:
+    void accept(dBaseCommandVisitor& visitor) {
+        std::string tab(ident_pos, ' ');
+        js_code_str << tab << "}";
+        //
+        visitor.visit(*this);
+    }
+};
+
 class dBaseCodeClassDTORCommand:
 public dBaseAppObject,
 public dBaseAST
 {
 public:
     void accept(dBaseCommandVisitor& visitor) {
-        std::cout << "accep:6" << std::endl;
+        visitor.visit(*this);
+    }
+};
+class dBaseCodeClassDTOREnd:
+public dBaseAppObject,
+public dBaseAST
+{
+public:
+    void accept(dBaseCommandVisitor& visitor) {
         visitor.visit(*this);
     }
 };
@@ -540,18 +777,26 @@ public:
         std::cout << t.js_code_str.str() << std::endl;
     }
 
-    void visit(dBaseAppClassHeader       & cmd) { emit_code(cmd); }
-    void visit(dBaseAppClassFooter       & cmd) { emit_code(cmd); }
+    void visit (dBaseAppClassHeader       & cmd) { emit_code(cmd); }
+    void visit (dBaseAppClassFooter       & cmd) { emit_code(cmd); }
 
-    void visit(dBaseAppParameter         & cmd) { emit_code(cmd); }
-    void visit(dBaseAppClassCTOREnd      & cmd) { emit_code(cmd); }
-    void visit(dBaseAppClassCommand      & cmd) { emit_code(cmd); }
-    void visit(dBaseAppClassCTORCommand  & cmd) { emit_code(cmd); }
-    void visit(dBaseAppClassDTORCommand  & cmd) { emit_code(cmd); }
+    void visit (dBaseAppParameter         & cmd) { emit_code(cmd); }
+    void visit (dBaseAppClassCommand      & cmd) { emit_code(cmd); }
+    void visit (dBaseAppClassCTORStart    & cmd) { emit_code(cmd); }
+    void visit (dBaseAppClassCTORCommand  & cmd) { emit_code(cmd); }
+    void visit (dBaseAppClassCTOREnd      & cmd) { emit_code(cmd); }
+    void visit (dBaseAppClassDTORCommand  & cmd) { emit_code(cmd); }
+    void visit (dBaseAppClassDTOREnd      & cmd) { emit_code(cmd); }
 
-    void visit(dBaseCodeClassCommand     & cmd) { emit_code(cmd); }
-    void visit(dBaseCodeClassCTORCommand & cmd) { emit_code(cmd); }
-    void visit(dBaseCodeClassDTORCommand & cmd) { emit_code(cmd); }
+    void visit (dBaseAppClassNewObject          & cmd) { emit_code(cmd); }
+    void visit (dBaseAppClassNewObjectParameter & cmd) { emit_code(cmd); }
+
+    void visit (dBaseCodeClassCommand     & cmd) { emit_code(cmd); }
+    void visit (dBaseCodeClassCTORStart   & cmd) { emit_code(cmd); }
+    void visit (dBaseCodeClassCTORCommand & cmd) { emit_code(cmd); }
+    void visit (dBaseCodeClassCTOREnd     & cmd) { emit_code(cmd); }
+    void visit (dBaseCodeClassDTORCommand & cmd) { emit_code(cmd); }
+    void visit (dBaseCodeClassDTOREnd     & cmd) { emit_code(cmd); }
 };
 
 // --------------------------
@@ -574,36 +819,41 @@ void dBaseApply(dBaseCommandVisitor& visitor)
     }
 }
 
+void init_app()
+{
+    app_parameter = new dBaseAppParameter;
+    app_header    = new dBaseAppClassHeader;
+    app_ctor      = new dBaseAppClassCTORCommand;
+
+    for (int i = 0; i < MAX_OBJECTS; ++i)
+    app_objects[i] = new dBaseAppClassNewObject;
+
+    app_footer = new dBaseAppClassFooter;
+}
+
+#if 0
 void testcase()
 {
-    dBaseAppParameter        app_parameter;
-    app_parameter.setParameter( new std::string("bmodal"));
-    app_parameter.setParameter( new std::string("aaa"));
-    app_parameter.setParameter( new std::string("zzz"));
-    command_list.push_back(&app_parameter);
+    dBaseAppClassNewObjectParameter app_obj1_parameter;
+    app_obj1_parameter.setParameter( new std::string("bau"));
+    command_list.push_back(&app_obj1_parameter);
+    //
+    dBaseAppClassNewObjectParameter app_obj2_parameter;
+    app_obj2_parameter.setParameter( new std::string("foo"));
+    app_obj2_parameter.setParameter( new std::string("bar"));
+    command_list.push_back(&app_obj2_parameter);
 
-    dBaseAppClassHeader      app_header;
-    command_list.push_back(& app_header);
+    dBaseAppClassNewObject  app_obj1("this.f1","Form1",&app_obj1_parameter); command_list.push_back(&app_obj1);
+    dBaseAppClassNewObject  app_obj2("this.f2","Form2",&app_obj2_parameter); command_list.push_back(&app_obj2);
 
-    dBaseAppClassCTORCommand app_ctor(&app_parameter);
-    command_list.push_back(& app_ctor);
+    dBaseAppClassCTOREnd    cto_ende;
+    command_list.push_back(&cto_ende);
 
-
-    dBaseAppClassCommand     app;
-    ident_pos = 9;
-    std::string str1(ident_pos, ' ');
-    app.js_code_str << str1
-    << "this.f = new Form1( );";
-    ident_pos = 1;
-    command_list.push_back(& app);
-
-
-    dBaseAppClassCTOREnd     app_ctor_end;
-    command_list.push_back(& app_ctor_end);
-
-    dBaseCodeClassCTORCommand code_ctor;
-    command_list.push_back(&code_ctor);
-
+    dBaseCodeClassCTORStart codeA_ctor(&app_obj1); command_list.push_back (& codeA_ctor );
+    dBaseCodeClassCTOREnd   codeA_cend;            command_list.push_back (& codeA_cend );
+    //
+    dBaseCodeClassCTORStart codeB_ctor(&app_obj2); command_list.push_back (& codeB_ctor );
+    dBaseCodeClassCTOREnd   codeB_ende;            command_list.push_back (& codeB_ende );
 
     dBaseAppClassDTORCommand app_dtor;
     command_list.push_back(& app_dtor);
@@ -613,6 +863,7 @@ void testcase()
 
     dBaseApply(exec_visitor);
 }
+#endif
 
 // -----------------------------
 // locale throw exception's ...
@@ -821,7 +1072,7 @@ E_TOKEN yyparse()
     #endif
     start:
     token = yygetc();
-    if (str_token == "parameter") {
+    if (token == E_TOKEN::E_PARAMETER) {
         for (;;) {
 
             #ifdef DEBUG
@@ -832,6 +1083,7 @@ E_TOKEN yyparse()
 
             str_token.clear();
             tok_ch = white_skipper();
+
             if (tok_ch == EOF) {
                 throw dBaseSyntaxError();
             }   mark1:
@@ -847,6 +1099,7 @@ E_TOKEN yyparse()
                 dbDebug() << str.str();
                 #endif
 
+                app_parameter->setParameter(str_token);
                 tok_ch = white_skipper();
                 if (tok_ch == ',') {
 
@@ -871,6 +1124,7 @@ E_TOKEN yyparse()
                     #endif
 
                     if (token == E_TOKEN::E_IDENT) {
+                        command_list.push_back(app_parameter);
                         if (str_token == "local")
                         goto mark_local;
                     }
@@ -914,6 +1168,8 @@ E_TOKEN yyparse()
     }   else
     if (token == E_TOKEN::E_LOCAL) {
         mark_local:
+        command_list.push_back(app_header);
+        command_list.push_back(app_ctor);
         for (;;) {
 
             #ifdef DEBUG
@@ -955,6 +1211,7 @@ E_TOKEN yyparse()
                     str_token.clear();
                     str_token.append(1,tok_ch);
                     token = getToken();
+                    st1_token = str_token;
 
                     #ifdef DEBUG
                     str.clear();
@@ -1034,6 +1291,7 @@ E_TOKEN yyparse()
                             str_token.clear();
                             str_token.append(1,tok_ch);
                             token = getToken();
+                            st2_token = str_token;
 
                             #ifdef DEBUG
                             str.clear();
@@ -1046,6 +1304,13 @@ E_TOKEN yyparse()
                                 tok_ch = white_skipper();
                                 if (tok_ch == ')') {
                                     yyerror = false;
+
+                                    app_objects[dBaseAppClassNewObjectIndex]->setObjectVar (st1_token);
+                                    app_objects[dBaseAppClassNewObjectIndex]->setObjectName(st2_token); command_list.push_back(
+                                    app_objects[dBaseAppClassNewObjectIndex]);
+
+                                    ++dBaseAppClassNewObjectIndex;
+
                                     tok_ch = white_skipper();
                                     if (tok_ch == '/') { yyerror = true; throw dBaseSyntaxError(); }
                                     goto start;
@@ -1189,9 +1454,6 @@ E_TOKEN getNumber()
 // ---------------------------------------
 int main(int argc, char **argv)
 {
-    testcase();
-return 0;
-
     std::cout << "dbase2js (c) 2019 Jens Kallup" << std::endl;
     std::cout << "all rights reserved."          << std::endl;
 
@@ -1221,14 +1483,14 @@ return 0;
 
         comment_start_on = false;
 
-        std::stringstream iss;  iss << argv[1] << ".prg";
+        std::stringstream iss;  iss << argv[1];
         std::stringstream oss;  oss << argv[1] << ".pro";
 
         yyin .open(iss.str(), ios_base::in );
         yyout.open(oss.str(), ios_base::out);
 
-        if (!yyin ) { throw dBaseError("read input file."  ); }
-        if (!yyout) { throw dBaseError("write output file."); }
+        if (!yyin .good()) { throw dBaseError("read input file."  ); }
+        if (!yyout.good()) { throw dBaseError("write output file."); }
 
         // -------------------------------------
         // check, if called from cli or wif ...
@@ -1251,46 +1513,17 @@ return 0;
         yyin.seekg(0, ios_base::beg);
 
         // ----------------------------------------
+        init_app();
         for (;;) {
         label_0:
             token = yyparse();
         }
         label_end:
         // ----------------------------------------
-
-printf("EEEMNNNNDE\n");
-
         if (yyerror == true)
         throw dBaseSyntaxError();
 
-
-
-
-	    for ( pvec_i = str_pvec.begin();
-	          pvec_i!= str_pvec.end();
-	        ++pvec_i) {
-	        if ((*pvec_i).size() > 0) {
-		        if (pvec_i+1 == str_pvec.end())
-		        {   str_para.append((*pvec_i));
-			        para.append("\n\t\tthis.");
-			        para.append((*pvec_i));
-			        para.append(" = ");
-			        para.append((*pvec_i));
-			        para.append(";");
-		            break;
-		          }   else {
-		            str_para.append((*pvec_i));
-		            str_para.append(", ");
-			        para.append("\n\t\tthis.");
-			        para.append((*pvec_i));
-			        para.append(" = ");
-			        para.append((*pvec_i));
-			        para.append(";");
-		        }
-	        }
-	    }
     }
-
     catch (dBaseUnknownError &err) { str_error.append(err.message); errFlag = true; }
     catch (dBaseDefaultError &err) { str_error.append(err.message); errFlag = true; }
     catch (dBaseCommentError &err) { str_error.append(err.message); errFlag = true; }
@@ -1315,8 +1548,11 @@ printf("EEEMNNNNDE\n");
         std::cout << "FAIL !!!" << std::endl;
         return 1;
     }
-
     // else, all done
     std::cout << "SUCCESS" << std::endl;
+
+    command_list.push_back(app_footer);
+    dBaseApply(exec_visitor);
     return 0;
 }
+
