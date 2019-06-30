@@ -62,7 +62,11 @@ std::string       str_para;
 std::stringstream str_exec;
 
 std::string scriptName;     // name of the script
+
 std::string str_token;      // current parsed token
+std::string token_ctx;
+
+std::string str_tmp;
 
 std::string st1_token;                // first  token string
 std::string st2_token;                // second token string
@@ -95,6 +99,8 @@ enum class E_TOKEN : unsigned int {
     E_LOCAL      = 0x101,
     E_CBREAK     = 0x102,
     E_COMMA      = 0x103,
+    E_OBRACE     = 0x104,     // open  soft bracket: (
+    E_CBRACE     = 0x105,     // close soft bracket: )
     E_UNKNOWN    = 0x000
 };
 E_TOKEN token_state = E_TOKEN::E_UNKNOWN;    // state/ctx of parsed token
@@ -183,6 +189,12 @@ struct dBaseAppObject {
     std::vector<std::string> prg_header;
     //
     std::vector<std::string> app_parameter;
+
+    std::map   <std::string,
+                std::vector<
+                std::string> > app_local_class;
+    std::vector<std::string>   app_local;
+
     std::vector<std::string> app_header;
     std::vector<std::string> app_ctor;
     std::vector<std::string> app_dtor;
@@ -261,6 +273,7 @@ void skip_comment()
 // ----------------------------------------------------------------------------
 int yygetc() {
     yyin.get(tok_ch);           // get char from yyin stream
+    line_col += 1;              // increase line column counter ..
     //
     if (yyin.eof())             // check, eof == true ?
     throw dBaseSyntaxEOF();     // throw non-error
@@ -307,14 +320,12 @@ E_TOKEN getToken()
 
     while (1) {
         tok_ch = yygetc();
-        line_col += 1;
         if (isalnum(tok_ch)
         ||  isalpha(tok_ch)
         ||  tok_ch == '_'
         ||  tok_ch == '.'  ) {
             if (++len >= MAX_TOKEN_LEN)
             break;
-            line_col += 1;
             str_token.append(1,tok_ch);
         }   else {
             yyin.putback(tok_ch);
@@ -327,7 +338,9 @@ E_TOKEN getToken()
     // ----------------------------------------------
     if (str_token == std::string("parameter")) token = E_TOKEN::E_PARAMETER; else
     if (str_token == std::string(","        )) token = E_TOKEN::E_COMMA;     else
-                                               token = E_TOKEN::E_IDENT;
+    if (str_token == std::string("="        )) token = E_TOKEN::E_ASSIGN;    else
+    if (str_token == std::string("("        )) token = E_TOKEN::E_OBRACE;    else
+    if (str_token == std::string(")"        )) token = E_TOKEN::E_CBRACE;
 
     return token;
 }
@@ -342,63 +355,83 @@ E_TOKEN getToken()
 // ----------------------------------------------------------------------------
 int skip_white_spaces()
 {
-    tok_ch = yygetc();
-
-    if (tok_ch == '*') {
+    std::string str1;
+    for (;;) {
         tok_ch = yygetc();
         if (tok_ch == '*') {
-            get_oneline_comment();
-            tok_ch = skip_white_spaces();
-        }   else {
-            yyerror = true;
-            throw dBaseSyntaxError();
-        }
-    }   else
-    if (tok_ch == '&') {
-        tok_ch = yygetc();
-        if (tok_ch == '&') {
-            get_oneline_comment();
-            tok_ch = skip_white_spaces();
-        }   else {
-            yyerror = true;
-            throw dBaseSyntaxError();
-        }
-    }   else
-    if (tok_ch == '/') {
-        tok_ch = yygetc();
-        if (tok_ch == '/') {
-            get_oneline_comment();
-            tok_ch = skip_white_spaces();
+            tok_ch = yygetc();
+            if (tok_ch == '*') {
+                get_oneline_comment();
+            }   else {
+                yyerror = true;
+                throw dBaseSyntaxError();
+            }
         }   else
-        if (tok_ch == '*') {
-            skip_comment();
-            tok_ch = skip_white_spaces();
-        }   else {
-            yyerror = true;
-            throw dBaseSyntaxError();
-        }
-    }   else
+        if (tok_ch == '&') {
+            tok_ch = yygetc();
+            if (tok_ch == '&') {
+                get_oneline_comment();
+            }   else {
+                yyerror = true;
+                throw dBaseSyntaxError();
+            }
+        }   else
+        if (tok_ch == '/') {
+            tok_ch = yygetc();
+            if (tok_ch == '/') {
+                get_oneline_comment();
+            }   else
+            if (tok_ch == '*') {
+                skip_comment();
+            }   else {
+                yyerror = true;
+                throw dBaseSyntaxError();
+            }
+        }   else
 
-    if (tok_ch == ' ' ) { line_col += 1; } else
-    if (tok_ch == '\t') { line_col += 8; } else
-    if (tok_ch == '\n') {
-        line_col  = 1;
-        line_row += 1;
-        tok_ch = skip_white_spaces();
-        return tok_ch;
-    }   else
+        if (tok_ch == ' ' ) {                } else
+        if (tok_ch == '\t') { line_col += 8; } else
+        if (tok_ch == '\n') {
+            line_col  = 1;
+            line_row += 1;
+        }   else
 
-    if (isalnum(tok_ch)
-    ||  tok_ch == '_') {
-        str_token.clear();
-        yyin.putback(tok_ch);
-        token = getToken();
-    }   else
+        if (isalnum(tok_ch)
+        ||  tok_ch == '_') {
+            str_token.clear();
+            yyin.putback(tok_ch);
+            token = getToken();
+            str_tmp = str_token;
 
-    if (tok_ch == ',') { token = E_TOKEN::E_COMMA;  } else
-    if (tok_ch == '=') { token = E_TOKEN::E_ASSIGN; } else
+            if (strcmp(str1.c_str(),str_token.c_str()) == 0)
+            token_ctx = str_token;
 
-    throw dBaseSyntaxError();
+            if (token_ctx == ""
+            &&  str_token == "parameter")
+            token_ctx      = "parameter";
+            //
+            if (token_ctx == "parameter"
+            &&  str_token == "local")
+            token_ctx      = "local";
+
+            printf("%s: %s\n",
+            token_ctx.c_str(),
+            str_token.c_str());
+
+            if (str_token == "parameter") token_ctx = "parameter"; else
+            if (str_token == "local"    ) token_ctx = "local";
+
+            str1 = token_ctx;
+
+            skip_white_spaces();
+        }   else
+
+        if (tok_ch == ',') { printf("%s: comma\n",token_ctx.c_str()); token = E_TOKEN::E_COMMA;  } else
+        if (tok_ch == '=') { printf("is=\n"      ); token = E_TOKEN::E_ASSIGN; } else
+        if (tok_ch == '(') { printf("---->>> (\n"); token = E_TOKEN::E_OBRACE; } else
+        if (tok_ch == ')') { printf("---->>> )\n"); token = E_TOKEN::E_CBRACE; }
+
+    }
 
     return tok_ch;
 }
@@ -487,21 +520,60 @@ bool yyexpect(char ch)
 
 void handle_parameter()
 {
+    std::string tmp;
     for (;;) {
         str_token.clear();
         tok_ch = skip_white_spaces();
-        if (str_token.size() > 0)   {
-            app_object.app_parameter.push_back(str_token);
-        }
+
+        if (str_token == "local") goto label_local ; else
+        if (str_token == "="    ) goto label_assign; 
+
+        app_object.app_parameter.push_back(str_token);
+
         if (tok_ch == ',') {
             str_token.clear();
             tok_ch = skip_white_spaces();
 
             if (token == E_TOKEN::E_IDENT) {
                 tok_ch = skip_white_spaces();
-                if (tok_ch == ',')                    
+                if (tok_ch == ',')
                 continue;
             }
+        }
+    }
+
+    label_assign:
+    for (;;) {
+        tmp = str_tmp;
+
+        str_token.clear();
+        tok_ch = skip_white_spaces();
+        if (str_token == "new")
+        {
+            tok_ch = skip_white_spaces(); app_object.app_local_class[tmp].push_back(str_token);
+std::cout << "1: " << str_token << std::endl;
+            tok_ch = skip_white_spaces(); 
+std::cout << "2: " << str_token << std::endl;
+
+if (token == E_TOKEN::E_OBRACE) { printf("klammer auf\n"); }
+            tok_ch = skip_white_spaces(); if (token == E_TOKEN::E_CBRACE) { printf("klammer  zu\n"); }
+           
+            else
+            throw dBaseSyntaxError();
+        }
+    }
+
+    label_local:
+    for (;;) {
+        str_token.clear();
+        tok_ch = skip_white_spaces();
+        if (tok_ch  == '=')
+        goto label_assign;
+
+        if (tok_ch == ',') {
+            token = getToken();
+            std::cout << str_token << std::endl;
+            app_object.app_local.push_back(str_token);
         }
     }
 }
@@ -510,7 +582,6 @@ void yyparse()
 {
     tok_ch = skip_white_spaces();
     if (token == E_TOKEN::E_PARAMETER) {
-        tok_ch = skip_white_spaces();
         handle_parameter();
     }
 }
@@ -542,10 +613,7 @@ int complex_finish(const T &t, bool errFlag = true)
     std::cout << std::endl;
 
     // catch was in action ...
-    if (errFlag == false && yyerror == false)
-    return complex_finish(false);
-
-    if (errFlag == true && yyerror == true) {
+    if (errFlag == true || yyerror == true) {
         std::cout << str_error  << std::endl;
         std::cout << "FAIL !!!" << std::endl;
         return 1;
@@ -575,11 +643,22 @@ int complex_finish(bool errFlag)
 
         std::cout << ") {" << std::endl;
 
+        // parameter
         for (auto item : app_object.app_parameter) {
             std::cout
-            << "\t\tthis." << item << ";"
+            << "\t\tthis."
+            << item << " = "
+            << item << ";"
             << std::endl;
         }
+        std::cout << std::endl;
+        // locals
+        for (auto item : app_object.app_local) {
+            std::cout
+            << "\t\tthis." << item << " = 0;"
+            << std::endl;
+        }
+
         std::cout << "\t}" << std::endl;
         std::cout << "}"   << std::endl;
 
